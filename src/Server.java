@@ -1,61 +1,64 @@
-package src;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.net.ServerSocket;
+import java.net.Socket;
 
-import java.nio.ByteBuffer;
+import model.Jogador;
+import enums.Status;
 
-public class Server extends Thread {
+public class Server {
 
-    private Communicator comm_server;
-    private Communicator comm_client;
-    private boolean running = true;
-    private short msg_type;
-    private int size;
-    private int descSize;
+    private static final String MOTD = "" +
 
+            "   | ----  Sistemas Operacionais 2  ---- |  \n" +
+            "   |       Paulo Henrique Pereira Silva  |  \n" +
+            "   |       Gabriel Lima do Nascimento    |  \n";
+    private static Jogo jogoEmEspera;
 
     public static void main(String[] args) {
-       
-        Server server = new Server("127.0.0.1", 5000);
 
-    }
-
-    public Server(String defaultIP, int defaultPort) {
         try {
-            this.comm_server = new Communicator(defaultIP, defaultPort);
 
-            System.out.println("Servidor iniciado =>");
-            System.out.println("\t Seu canal eh: " + this.comm_server.serverChannelDescription() + "\n");
+            //@SuppressWarnings("resource")
+            ServerSocket server = new ServerSocket(3500);
+            System.out.println("Servidor iniciado");
 
-            this.start();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+            while (true) {
 
-    public void run() {
-        try {
-            ByteBuffer buf = null;
-            System.out.println("\t Recebendo Mensagens ... \n");
-
-            while (this.running) {
-                buf = this.comm_server.receiveMessages();
-                msg_type = buf.getShort();
-                size = buf.getInt();
-                switch (msg_type) {
-                    case Config.NEW_WORKER:
-                        String workerId = Communicator.readString(buf).trim();
-                        System.out.println("Recebi nova mensagem: " + workerId);
-                        String channelDesc = Communicator.readString(buf).trim();
-                        System.out.println("Recebi mais uma mensagem: " + channelDesc);
-                        break;
-
-                    default:
-                        System.out.println("InterfaceProxy =>");
-                        System.out.println("\t\t LOST MESSAGE! Type: " + msg_type + "\n");
-                        break;
+                Socket conexao = server.accept();
+                BufferedReader entrada = new BufferedReader(new InputStreamReader(conexao.getInputStream()));
+                PrintStream saida = new PrintStream(conexao.getOutputStream());
+                Jogador jogador = new Jogador(entrada, saida, conexao);
+                jogador.getSaida().println(MOTD);
+                Jogo game = buscarJogo();
+                if (game != null) {
+                    game.conectarJogador(jogador);
+                    continue;
                 }
+                jogador.getSaida().print("Que pena! O servidor está cheio...");
+                conexao.close();
+
             }
-        } catch (Exception e) {
+
+        } catch (IOException e) {
             e.printStackTrace();
         }
+
     }
+
+    /**
+     * @return uma instância do jogo caso não haja outro em andamento
+     */
+    private static Jogo buscarJogo() {
+        if (jogoEmEspera == null || jogoEmEspera.getStatus() == Status.FINALIZADO) {
+            jogoEmEspera = new Jogo();
+        }
+        if (jogoEmEspera.getStatus() == Status.AGUARDANDO_JOGADORES) {
+            return jogoEmEspera;
+        }
+        return null;
+    }
+
 }
